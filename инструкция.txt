@@ -1,6 +1,0 @@
-@echo off 
-cd C:\Users\My PC\Desktop\casto\casto
-start explorer http://localhost:3000
-npm install
-npm start
-pause
