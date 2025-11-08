@@ -1,96 +1,88 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
+
 const app = express();
 const PORT = 3000;
 
-const MESSAGES_FILE = './casto_messages.json';
+// Путь к файлу с сообщениями
+const CHAT_FILE = path.join(__dirname, 'casto_messages.json');
 
 // Создаём файл, если его нет
-if (!fs.existsSync(MESSAGES_FILE)) {
-  fs.writeFileSync(MESSAGES_FILE, '[]');
+if (!fs.existsSync(CHAT_FILE)) {
+  fs.writeFileSync(CHAT_FILE, '[]');
 }
 
+// Статические файлы (index.html и т.д.)
 app.use(express.static('public'));
 app.use(express.json());
 
-// Получить все сообщения
+// Получить сообщения (с фильтрацией по ^ник)
 app.get('/messages', (req, res) => {
-  fs.readFile(MESSAGES_FILE, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Ошибка чтения');
-    res.json(JSON.parse(data));
+  const username = req.query.username || 'Аноним';
+
+  fs.readFile(CHAT_FILE, 'utf8', (err, data) => {
+    if (err) {
+      console.error('Ошибка чтения файла:', err);
+      return res.status(500).send('Не удалось прочитать файл');
+    }
+
+    let messages = [];
+    try {
+      messages = data.trim() ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Файл повреждён, возвращаем пустой');
+    }
+
+    // Показываем: общие + только адресованные пользователю
+    const filtered = messages.filter(msg => {
+      const content = (msg.content || '').trim();
+      if (!content.startsWith('^')) return true;
+
+      const match = content.match(/^\^(\w+)/);
+      if (!match) return true;
+
+      const targetNick = match[1];
+      return targetNick === username.trim();
+    });
+
+    res.json(filtered);
   });
 });
 
 // Отправить сообщение
-app.post('/send', (req, res) => {
-  const { author, text, timestamp } = req.body;
-  if (!author || !text || !timestamp) {
-    return res.status(400).send('Нет данных');
+app.post('/messages', (req, res) => {
+  const { author, content } = req.body;
+  if (!author || !content) {
+    return res.status(400).send('Нет автора или текста');
   }
 
-  fs.readFile(MESSAGES_FILE, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Ошибка');
-    const messages = JSON.parse(data);
-    messages.push({ author, text, timestamp });
-    fs.writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), (err) => {
-      if (err) return res.status(500).send('Ошибка записи');
+  fs.readFile(CHAT_FILE, 'utf8', (err, data) => {
+    let messages = [];
+    try {
+      messages = data.trim() ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('Файл повреждён, создаём новый');
+    }
 
-      // Рассылка всем через WebSocket
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: 'new_message',
-            message: { author, text, timestamp }
-          }));
-        }
-      });
-
-      res.send('OK');
+    messages.push({
+      author: author.trim(),
+      content: content.trim(),
+      timestamp: new Date().toISOString()
     });
-  });
-});
 
-// Удалить сообщение
-app.post('/delete', (req, res) => {
-  const { author, timestamp } = req.body;
-  fs.readFile(MESSAGES_FILE, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Ошибка');
-    let messages = JSON.parse(data);
-    const index = messages.findIndex(m => m.timestamp == timestamp && m.author === author);
-    if (index === -1) return res.status(403).send('Нельзя');
-
-    messages.splice(index, 1);
-    fs.writeFile(MESSAGES_FILE, JSON.stringify(messages, null, 2), () => {
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'delete_message', timestamp }));
-        }
-      });
-      res.send('OK');
+    fs.writeFile(CHAT_FILE, JSON.stringify(messages, null, 2), (err) => {
+      if (err) {
+        console.error('Ошибка записи:', err);
+        return res.status(500).send('Не удалось сохранить');
+      }
+      res.status(201).send('OK');
     });
   });
 });
 
 // Запуск сервера
-const server = app.listen(PORT, () => {
-  console.log(`Casto запущен: http://localhost:${PORT}`);
-});
-
-// WebSocket (для обновлений)
-const WebSocket = require('ws');
-const wss = new WebSocket.Server({ noServer: server });
-
-wss.on('connection', (ws) => {
-  ws.on('message', (data) => {
-    try {
-      const msg = JSON.parse(data);
-      wss.clients.forEach(client => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(msg));
-        }
-      });
-    } catch (e) {
-      console.log('Ошибка WebSocket:', e);
-    }
-  });
+app.listen(PORT, () => {
+  console.log('🔷 Casto запущен: http://localhost:3000');
+  console.log('🛠 Сообщения хранятся в: ' + CHAT_FILE);
 });

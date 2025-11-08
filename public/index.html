@@ -1,16 +1,181 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Casto</title>
-  <script>
-    if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
-      window.location.href = 'mobile.html';
-    } else {
-      window.location.href = 'desktop.html';
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      padding: 20px;
     }
-  </script>
+    h2 {
+      text-align: center;
+      color: #f5e0dc;
+      margin-bottom: 20px;
+    }
+    #messages {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .msg {
+      background: #313244;
+      padding: 12px;
+      border-radius: 8px;
+      max-width: 80%;
+      border-left: 3px solid #f9e2af;
+    }
+    .private {
+      background: #4169e1 !important;
+      border-left: 3px solid #ff6347;
+    }
+    .author {
+      font-weight: bold;
+      color: #89b4fa;
+      margin-bottom: 4px;
+    }
+    .input-area {
+      display: flex;
+      gap: 10px;
+    }
+    input, button {
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+    }
+    #author {
+      width: 150px;
+      background: #45475a;
+      color: white;
+    }
+    #content {
+      flex: 1;
+      background: #45475a;
+      color: white;
+    }
+    button {
+      background: #89b4fa;
+      color: black;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #74c7ec;
+    }
+  </style>
 </head>
-<body>Загрузка...</body>
+<body>
+  <h2>💬 Casto</h2>
+  <div id="messages"></div>
+
+  <div class="input-area">
+    <input type="text" id="author" value="Пользователь" placeholder="Имя" />
+    <input type="text" id="content" placeholder="Напиши сообщение..." />
+    <button>Отправить</button>
+  </div>
+
+  <!-- 🔔 Аудио для уведомлений -->
+  <audio id="notifySound" preload="auto">
+    <source src="https://assets.mixkit.co/sfx/preview/mixkit-digital-form-notification-993.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const messagesEl = document.getElementById('messages');
+      const authorEl = document.getElementById('author');
+      const contentEl = document.getElementById('content');
+      const notifySound = document.getElementById('notifySound');
+      let lastMessageCount = 0;
+
+      // Проиграть звук
+      function playSound() {
+        if (notifySound) {
+          notifySound.currentTime = 0;
+          notifySound.play().catch(err => {
+            console.log('Звук заблокирован. Кликните по странице.');
+          });
+        }
+      }
+
+      // Загрузить сообщения
+      function loadMessages() {
+        const username = authorEl.value.trim() || 'Пользователь';
+
+        fetch(`/messages?username=${encodeURIComponent(username)}`)
+          .then(res => res.json())
+          .then(messages => {
+            const isNew = messages.length > lastMessageCount;
+            const hasPrivateForMe = messages.slice(lastMessageCount).some(msg => {
+              const content = (msg.content || '').trim();
+              return content.startsWith(`^${username}`);
+            });
+
+            messagesEl.innerHTML = '';
+            messages.forEach(msg => {
+              const el = document.createElement('div');
+              el.className = 'msg';
+              const content = msg.content.trim();
+
+              // Подсветка приватного сообщения
+              if (content.startsWith(`^${username}`)) {
+                el.classList.add('private');
+              }
+
+              // Убираем ^ник из текста
+              const displayText = content.replace(/^\^\w+\s/, '');
+
+              el.innerHTML = `
+                <div class="author">${msg.author}</div>
+                <div>${displayText}</div>
+              `;
+              messagesEl.appendChild(el);
+            });
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+
+            // 🔔 Проигрываем звук
+            if (isNew && (hasPrivateForMe || true)) {
+              playSound();
+            }
+
+            lastMessageCount = messages.length;
+          })
+          .catch(err => console.error('Ошибка:', err));
+      }
+
+      // Отправить сообщение
+      function send() {
+        const author = authorEl.value.trim() || 'Аноним';
+        const content = contentEl.value.trim();
+        if (!content) return;
+
+        fetch('/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ author, content })
+        })
+        .then(() => {
+          contentEl.value = '';
+          setTimeout(loadMessages, 500);
+        })
+        .catch(err => console.error('Отправка:', err));
+      }
+
+      // Enter и кнопка
+      contentEl.addEventListener('keypress', e => {
+        if (e.key === 'Enter') send();
+      });
+
+      document.querySelector('button').addEventListener('click', send);
+
+      // Загрузка
+      loadMessages();
+      setInterval(loadMessages, 2000);
+    });
+  </script>
+</body>
 </html>
