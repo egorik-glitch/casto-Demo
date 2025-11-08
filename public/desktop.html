@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Casto 💬</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.5em;
+      padding: 15px;
+      margin: 0;
+      background: #1a1a1a;
+      border-bottom: 1px solid #333;
+      color: #bb86fc;
+    }
+
+    /* Сообщения — прокручиваемый блок */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: #1a1a1a;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 12px;
+      background: #2a2a2a;
+      border-left: 4px solid #bb86fc;
+      border-radius: 6px;
+      position: relative;
+      align-self: flex-start;
+      word-wrap: break-word;
+    }
+
+    .message.own {
+      align-self: flex-end;
+      background: #1a2d4d;
+      border-left-color: #03dac6;
+    }
+
+    .message-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 0.9em;
+    }
+
+    .author {
+      font-weight: bold;
+      color: #bb86fc;
+    }
+
+    .own .author {
+      color: #03dac6;
+    }
+
+    .time {
+      color: #888;
+    }
+
+    .text {
+      font-size: 1em;
+      line-height: 1.4;
+    }
+
+    /* Кнопка удаления — только у своих */
+    .delete {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: #cf6679;
+      color: white;
+      border: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      font-size: 0.8em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .delete:hover {
+      background: #b00020;
+    }
+
+    /* Форма — всегда внизу */
+    .form {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: #1a1a1a;
+      border-top: 1px solid #333;
+    }
+
+    #author {
+      flex: 0 0 140px;
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #1e1e1e;
+      color: #e0e0e0;
+    }
+
+    #message {
+      flex: 1;
+      padding: 12px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      resize: none;
+    }
+
+    #message:focus {
+      outline: 2px solid #bb86fc;
+    }
+
+    button {
+      flex: 0 0 120px;
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      background: #bb86fc;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #a370d8;
+    }
+
+    /* Адаптивность */
+    @media (max-width: 600px) {
+      .form {
+        flex-direction: column;
+      }
+
+      #author, #message, button {
+        width: 100%;
+        flex: none;
+      }
+    }
+  </style>
+
+</head>
+<body>
+  <h1>Casto 💬</h1>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="form">
+    <input type="text" id="author" value="Гость" placeholder="Имя"/>
+    <input type="text" id="message" placeholder="Введите сообщение..." />
+    <button onclick="sendMessage()">Отправить</button>
+  </div>
+
+  </div>
+
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const authorEl = document.getElementById('author');
+    const messageEl = document.getElementById('message');
+
+    const username = localStorage.getItem('username') || prompt('Имя?') || 'Гость';
+    authorEl.value = username;
+    localStorage.setItem('username', username);
+
+    function loadMessages() {
+      fetch('/messages')
+        .then(r => r.json())
+        .then(messages => {
+          messagesEl.innerHTML = '';
+          messages.forEach(addMessage);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        })
+        .catch(console.error);
+    }
+
+    function addMessage(msg) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      const time = new Date(msg.timestamp).toLocaleTimeString();
+      div.innerHTML = `
+        <div>
+          <span class="author">${msg.author}</span>
+          <span class="time">${time}</span>
+        </div>
+        <div style="margin: 4px 0;">${msg.text}</div>
+        <button class="delete" onclick="deleteMessage(${msg.timestamp})">🗑</button>
+      `;
+      if (msg.author !== username) {
+        div.querySelector('.delete').remove();
+      }
+      messagesEl.appendChild(div);
+    }
+
+    function sendMessage() {
+      const author = authorEl.value.trim() || 'Гость';
+      const text = messageEl.value.trim();
+      if (!text) return;
+
+      const timestamp = Date.now();
+      fetch('/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author, text, timestamp })
+      })
+      .then(() => {
+        messageEl.value = '';
+        loadMessages();
+      })
+      .catch(console.error);
+    }
+
+    function deleteMessage(timestamp) {
+      fetch('/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ author: username, timestamp })
+      })
+      .then(() => loadMessages())
+      .catch(console.error);
+    }
+
+    // WebSocket для обновлений
+    const ws = new WebSocket(`ws://${window.location.host}`);
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'new_message') {
+        addMessage(data.message);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+      if (data.type === 'delete_message') {
+        messagesEl.querySelectorAll(`.delete`).forEach(btn => {
+          if (btn.onclick.toString().includes(`deleteMessage(${data.timestamp})`)) {
+            btn.closest('.message')?.remove();
+          }
+        });
+      }
+    };
+
+    // Загружаем при старте
+    loadMessages();
+  </script>
+</body>
+</html>
