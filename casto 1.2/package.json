@@ -1,0 +1,15 @@
+{
+  "name": "casto",
+  "version": "1.0.0",
+  "description": "Мессенджер Casto с сохранением сообщений в файл",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "keywords": ["chat", "messenger", "casto"],
+  "author": "You",
+  "license": "MIT"
+}
